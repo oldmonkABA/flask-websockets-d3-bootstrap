@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="//ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/socket.io/1.3.5/socket.io.min.js"></script>
+    <script type="text/javascript" src="//cdnjs.cloudflare.com/ajax/libs/d3/3.5.16/d3.min.js"></script>
+    <style>
+    .axis {
+  font: 10px sans-serif;
+}
+
+.axis path,
+.axis line {
+  fill: none;
+  stroke: #000;
+  shape-rendering: crispEdges;
+}
+
+
+  </style>
+   <script>
+ $(document).ready(function(){
+    var socket = io.connect('http://' + document.domain + ':' + location.port + '/test');
+    var client_message = "This is a client, I am attemping to communicate";
+    socket.emit('channel-a', client_message);
+    console.log("[x] Sent        : " + client_message);
+    socket.on("channel-a", function(message) {
+    console.log("[x] Received    : " + message.data);
+    });
+    var numbers_received = [];
+    var ind_rec=[];
+    var w = 50;
+    var margin = {top: 20, right: 20, bottom: 30, left: 80};
+    var h = 400 - margin.top-margin.bottom;
+    var x = d3.scale.linear()
+              .domain([0, 1])
+            .range([0, 10]);
+  
+    var y = d3.scale.linear()
+            .range([h,0]);
+
+    var xscale= d3.scale.ordinal()
+    .rangeRoundBands([0,500]);
+
+    var chart=d3.select("#chart")
+                .append("svg")
+             .attr("width", 20*w + margin.left + margin.right)
+             .attr("height", 2*h + margin.top + margin.bottom)
+             .append("g")
+             .attr("transform", "translate(" + margin.left + "," + margin.top + ")")
+             .style("border", "1px solid black");
+
+    var xAxis = d3.svg.axis()
+    .scale(xscale)
+    .orient("bottom");
+    
+   
+
+    var yAxis = d3.svg.axis()
+    .scale(y)
+    .orient("left")
+    .ticks(10); 
+
+     
+    socket.on('newnumber', function(msg) {
+        console.log("Received number  " + msg.number +" , Index "+msg.ind);
+        //maintain a list of ten numbers
+        wide=100;
+        numbers_received.push(msg.number);
+
+        /**
+        
+        ind_rec.push(msg.ind);
+        if (numbers_received.length >= 50){
+            wide = 500/numbers_received.length;
+            x.range([0,wide]);
+            //ind_rec.shift();
+        } */         
+        xscale.domain(d3.range(1,numbers_received.length+1));
+        
+        if (numbers_received.length >10){
+            L=numbers_received.length;
+            step = Math.round(L/10);
+            tickvalues=d3.range(1,L,step);
+        //tickvalues[0]=1;
+            xAxis.tickValues(tickvalues);
+        }
+
+        if (numbers_received.length>5){
+            wide =xscale.rangeBand()
+        }
+
+        //#xscale.rangeRoundBands([0,10*numbers_received.length]);
+        y.domain([0, d3.max(numbers_received, function(d) { return d; })]);
+        chart.select(".y.axis").transition().duration(300).call(yAxis);
+        chart.select('.x.axis').transition().duration(300).call(xAxis);
+
+        var rect = chart.selectAll(".bar")
+        .data(numbers_received, function(d) { return d; });
+        
+        rect.exit()
+            .transition()
+            .duration(300)
+            .attr("y", y(0))
+            .attr("height", h - y(0))
+            .style('fill-opacity', 1e-6)
+            .remove();
+
+        rect.enter().append("rect")
+            .attr("class","bar")
+            .attr("x", function(d, i) { return xscale(i + 1) - .5; })
+            //.attr("y", function(d) { return y(d) - .5; })
+            .attr("y",y(0))
+            //.attr("width", wide)
+            //.attr("height", function(d) { return h- y(d); })
+            .attr("height",h-y(0))
+            .attr("fill","steelblue")
+            
+            //.on("mouseover",function(d){ d3.select(this).attr("fill", "red");})
+            //.on("mouseout", function() {tooltip.style('display', 'none');}); 
+            .on("mouseover",function() {d3.select(this).attr("fill", "orange");})
+            .on("mouseout", function(d){d3.select(this).attr("fill", "steelblue");})
+            .append("title")
+            .text(function(d,i) {return '('+(i+1)+' , '+d+')';});
+            //.attr("stroke","white");
+            
+            
+ 
+        rect.transition()
+            .duration(300)
+            .attr("height", function(d) { return h- y(d); })
+            .attr("x", function(d, i) { return xscale(i+1)-.5; })
+            .attr("y",function(d){return y(d);})
+            .attr("width",wide);
+
+        //.on("mouseover",function(d){ tooltip.select('.label').html(d);tooltip.style('display', 'block');})
+        //.on("mouseout", function() {tooltip.style('display', 'none');});         
+
+        
+    });
+
+    $('form#param').submit(function(event) {
+        chart.append("g")
+            .attr("class", "x axis")
+            .attr("transform", "translate(0," + h + ")");
+
+
+        chart.append("g")
+            .attr("class", "y axis")
+            .append("text") // just for the title (ticks are automatic)
+            .attr("transform", "translate("+ (-60) +","+(h/2)+")rotate(-90)") // rotate the text!
+            .attr("y", 6)
+            .attr("x",0)
+            .attr("dy", ".71em")
+            .style("text-anchor","middle")
+            .text("Value");   
+
+        var tooltip = d3.select('#chart')                               // NEW
+                        .append('div')                                                // NEW
+                        .attr('class', 'tooltip');         
+
+        tooltip.append('div')                                           // NEW
+               .attr('class', 'label');         
+        
+        chart.selectAll("line.horizontalGrid").data(y.ticks(4)).enter()
+            .append("line")
+            .attr(
+            {
+                "class":"horizontalGrid",
+                "x1" : margin.right,
+                "x2" :500,
+                "y1" : function(d){ return y(d);},
+                "y2" : function(d){ return y(d);},
+                "fill" : "none",
+                "shape-rendering" : "crispEdges",
+                "stroke" : "grey",
+                "stroke-width" : "1px",
+                "stroke-dasharray": "10 5",
+            });
+
+        socket.emit('start_gen', {data: $('#maxn').val()});
+        return false;
+    });
+ });
+   </script>
+    <link rel="stylesheet" href="//maxcdn.bootstrapcdn.com/bootstrap/3.2.0/css/bootstrap.min.css">
+</head>
+<body>
+<h1 class="text-center">Asynchronous Websocket Communication</h1>
+<div class = "col-md-8" align="left">
+<div class="panel panel-primary">
+    <div class="panel-heading">Choose the maximum number for the random number generator</div>
+   
+    <p></p><p></p><p></p>
+    <form action="#" method="POST" class="form-inline" role="form" id="param">
+    
+        <div class="form-group">
+            <label for="maxn">Maximum Number</label>
+            <input type="text" class="form-control" id="maxn" name="maxn" placeholder="1">
+        </div>
+    
+        
+    
+        <button type="submit" class="btn btn-primary">Submit</button>
+    </form>
+    <p></p><p></p><p></p>
+    </div>
+
+</div>
+ 
+
+<div id="chart"></div>
+
+
+
+</body
+</html>
